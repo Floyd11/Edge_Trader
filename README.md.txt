@@ -1,0 +1,1 @@
+# Antigravity Project Template. Базовый шаблон с ИИ-скиллами.
