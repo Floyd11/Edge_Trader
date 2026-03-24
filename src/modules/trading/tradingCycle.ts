@@ -6,6 +6,7 @@ import cron from 'node-cron';
 import axios from 'axios';
 import { pool } from '../../db/pool';
 import { VirtualTrade } from '../../types';
+import { reportTrade } from '../reporting/sheetsReporter';
 
 const CLOB_API_BASE = 'https://clob.polymarket.com';
 
@@ -41,24 +42,30 @@ async function checkOpenPositions(): Promise<void> {
                 trade.entry_volume_usdc
               : 0;
 
-          await pool.query(
+          const updateResult = await pool.query<VirtualTrade>(
             `UPDATE virtual_trades
              SET status = 'CLOSED_EDGE', exit_price = $1, pnl_usdc = $2, exit_time = NOW()
-             WHERE id = $3`,
+             WHERE id = $3
+             RETURNING *`,
             [currentPrice, pnl, trade.id],
           );
 
-          console.log(
-            `[TradingCycle] CLOSED_EDGE — task_id: ${trade.task_id} | exit: ${currentPrice} | PnL: ${pnl.toFixed(2)} USDC`,
-          );
+          if (updateResult.rows[0]) {
+            await reportTrade(updateResult.rows[0]);
+            console.log(
+              `[TradingCycle] CLOSED_EDGE — task_id: ${trade.task_id} | exit: ${currentPrice} | PnL: ${pnl.toFixed(2)} USDC`,
+            );
+          }
         }
-        // Market timeout is handled separately by the cleanup cron (CLOSED_TIMEOUT)
       } catch (err) {
         const reason = err instanceof Error ? err.message : String(err);
-        await pool.query(
-          `UPDATE virtual_trades SET status = 'ERROR', error_reason = $1 WHERE id = $2`,
+        const errorResult = await pool.query<VirtualTrade>(
+          `UPDATE virtual_trades SET status = 'ERROR', error_reason = $1, exit_time = NOW() WHERE id = $2 RETURNING *`,
           [reason, trade.id],
         );
+        if (errorResult.rows[0]) {
+          await reportTrade(errorResult.rows[0]);
+        }
         console.error(`[TradingCycle] ERROR for task_id ${trade.task_id}:`, reason);
       }
     }),

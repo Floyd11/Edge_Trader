@@ -3,6 +3,7 @@ import cron from 'node-cron';
 import axios from 'axios';
 import { pool } from '../../db/pool';
 import { VirtualTrade } from '../../types';
+import { reportTrade } from '../reporting/sheetsReporter';
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -108,6 +109,14 @@ async function checkExits() {
           console.log(
             `[ExitManager] Сделка [${shortId}] закрыта по ${exitReason}. PnL: ${sign}${pnlUsdc.toFixed(2)} USDC`
           );
+
+          // 6. Update the trade object and append to Google Sheets
+          trade.status = 'CLOSED_EDGE';
+          trade.exit_price = exitPrice;
+          trade.pnl_usdc = pnlUsdc;
+          trade.kelly_sim_pnl_usdc = kellyPnlUsdc;
+          trade.exit_time = new Date();
+          await reportTrade(trade);
         }
       } catch (tradeErr) {
         console.error(

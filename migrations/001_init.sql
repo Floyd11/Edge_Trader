@@ -21,6 +21,13 @@ CREATE TABLE IF NOT EXISTS virtual_trades (
     entry_price       DECIMAL(6,4),
     entry_volume_usdc DECIMAL(10,2),
     target_price      DECIMAL(6,4),
+    stop_loss_price   DECIMAL(6,4),
+    total_fee_paid    DECIMAL(6,4),
+
+    -- Kelly simulation metrics
+    kelly_sim_volume_usdc DECIMAL(10,2),
+    kelly_entry_price     DECIMAL(6,4),
+    kelly_sim_pnl_usdc    DECIMAL(10,2),
 
     -- Status and result
     status            VARCHAR(20)   DEFAULT 'PENDING'
