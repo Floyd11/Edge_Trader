@@ -5,8 +5,8 @@ import Fastify from 'fastify';
 import { env } from './config/env';
 import { pool } from './db/pool';
 import { webhookRoutes } from './routes/webhook';
-import { startDiscoveryLoop } from './modules/discovery/discoveryLoop';
-import { startTradingCycle } from './modules/trading/tradingCycle';
+import { startScanner } from './modules/discovery/scanner';
+import { startExitManager } from './modules/trading/exit_manager';
 import { startCleanupCron } from './modules/cleanup/cleanupCron';
 
 async function bootstrap(): Promise<void> {
@@ -31,8 +31,8 @@ async function bootstrap(): Promise<void> {
   await fastify.register(webhookRoutes);
 
   // ── 3. Start background workers ─────────────────────────────────────────────
-  startDiscoveryLoop();
-  startTradingCycle();
+  startScanner();
+  startExitManager();
   startCleanupCron();
 
   // ── 4. Listen ───────────────────────────────────────────────────────────────

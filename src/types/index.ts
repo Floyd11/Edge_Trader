@@ -46,6 +46,11 @@ export interface VirtualTrade {
   entry_price: number | null;
   entry_volume_usdc: number | null;
   target_price: number | null;
+  stop_loss_price: number | null;
+  total_fee_paid: number | null;
+  kelly_sim_volume_usdc: number | null;
+  kelly_entry_price: number | null;
+  kelly_sim_pnl_usdc: number | null;
   status: TradeStatus;
   error_reason: string | null;
   exit_price: number | null;
