@@ -8,6 +8,7 @@ import { webhookRoutes } from './routes/webhook';
 import { startScanner } from './modules/discovery/scanner';
 import { startExitManager } from './modules/trading/exit_manager';
 import { startCleanupCron } from './modules/cleanup/cleanupCron';
+import { startReportingCron } from './modules/reporting/reportingCron';
 
 async function bootstrap(): Promise<void> {
   // ── 1. Verify DB connectivity before accepting traffic ──────────────────────
@@ -34,6 +35,7 @@ async function bootstrap(): Promise<void> {
   startScanner();
   startExitManager();
   startCleanupCron();
+  startReportingCron();
 
   // ── 4. Listen ───────────────────────────────────────────────────────────────
   await fastify.listen({ port: env.BOT_PORT, host: '0.0.0.0' });

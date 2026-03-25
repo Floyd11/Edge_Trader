@@ -53,8 +53,6 @@ edge_trader/
 - `TARGET_PROFIT_MULT` read from env (not hardcoded)
 
 ## Next Steps
-1. Run `psql` migration: `psql $BOT_DATABASE_URL -f migrations/001_init.sql`
-2. Copy `.env.example` → `.env` and fill in real credentials
-3. Implement Google Sheets reporter (`src/modules/reporting/sheetsReporter.ts`)
-4. Add Jest unit tests for: virtualExecution, clobClient, webhook route
-5. Deploy with PM2: `npm run build && pm2 start ecosystem.config.js`
+1. Deploy with PM2: `npm run build && pm2 start ecosystem.config.js`
+2. Monitor logs: `pm2 logs edge-trader`
+3. Verify Google Sheets "DailyStats" automated reporting at 00:00 UTC.

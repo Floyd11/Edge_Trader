@@ -9,16 +9,17 @@ function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function parseLevel(level: any): { price: number; size: number } {
+function parseLevel(level: [string, string] | { price: string; size: string } | unknown): { price: number; size: number } {
   if (Array.isArray(level)) {
     return {
-      price: parseFloat(level[0]),
-      size: parseFloat(level[1]),
+      price: parseFloat(String(level[0])),
+      size: parseFloat(String(level[1])),
     };
   }
+  const l = level as { price: string; size: string };
   return {
-    price: parseFloat(level.price),
-    size: parseFloat(level.size),
+    price: parseFloat(String(l.price)),
+    size: parseFloat(String(l.size)),
   };
 }
 
@@ -56,15 +57,28 @@ async function checkExits() {
         let exitReason: 'Take-Profit' | 'Stop-Loss' | null = null;
 
         // 3. Trigger Logic
-        // Take-Profit: Limit Maker exit
-        if (trade.target_price !== null && bestBid >= trade.target_price) {
-          exitPrice = trade.target_price;
-          exitReason = 'Take-Profit';
-        }
-        // Stop-Loss: Market Taker exit
-        else if (trade.stop_loss_price !== null && bestBid <= trade.stop_loss_price) {
-          exitPrice = bestBid;
-          exitReason = 'Stop-Loss';
+        if (trade.side === 'YES') {
+          // Take-Profit for YES: when price rises to/above target
+          if (trade.target_price !== null && bestBid >= trade.target_price) {
+            exitPrice = trade.target_price;
+            exitReason = 'Take-Profit';
+          }
+          // Stop-Loss for YES: when price drops to/below stop loss
+          else if (trade.stop_loss_price !== null && bestBid <= trade.stop_loss_price) {
+            exitPrice = bestBid;
+            exitReason = 'Stop-Loss';
+          }
+        } else if (trade.side === 'NO') {
+          // Take-Profit for NO: when YES price drops to/below target
+          if (trade.target_price !== null && bestBid <= trade.target_price) {
+            exitPrice = trade.target_price;
+            exitReason = 'Take-Profit';
+          }
+          // Stop-Loss for NO: when YES price rises to/above stop loss
+          else if (trade.stop_loss_price !== null && bestBid >= trade.stop_loss_price) {
+            exitPrice = bestBid;
+            exitReason = 'Stop-Loss';
+          }
         }
 
         // If either TP or SL hit
@@ -75,20 +89,32 @@ async function checkExits() {
 
           const entryPrice = trade.entry_price ?? 0;
           const entryVolume = trade.entry_volume_usdc ?? 0;
-
-          // Main PnL
-          if (entryPrice > 0) {
-            const sharesHeld = entryVolume / entryPrice;
-            pnlUsdc = sharesHeld * exitPrice - entryVolume;
-          }
-
-          // Shadow Kelly PnL
           const kellyEntryPrice = trade.kelly_entry_price ?? 0;
           const kellyVolume = trade.kelly_sim_volume_usdc ?? 0;
 
-          if (kellyEntryPrice > 0) {
-            const kellySharesHeld = kellyVolume / kellyEntryPrice;
-            kellyPnlUsdc = kellySharesHeld * exitPrice - kellyVolume;
+          if (entryPrice > 0) {
+            if (trade.side === 'YES') {
+              const sharesHeld = entryVolume / entryPrice;
+              pnlUsdc = sharesHeld * exitPrice - entryVolume;
+
+              if (kellyEntryPrice > 0) {
+                const kellySharesHeld = kellyVolume / kellyEntryPrice;
+                kellyPnlUsdc = kellySharesHeld * exitPrice - kellyVolume;
+              }
+            } else if (trade.side === 'NO') {
+              // NO Share price is 1 - YES price
+              const noEntryPrice = 1 - entryPrice;
+              const noExitPrice = 1 - exitPrice;
+              
+              const sharesHeld = entryVolume / noEntryPrice;
+              pnlUsdc = sharesHeld * noExitPrice - entryVolume;
+
+              if (kellyEntryPrice > 0) {
+                const kellyNOEntryPrice = 1 - kellyEntryPrice;
+                const kellySharesHeld = kellyVolume / kellyNOEntryPrice;
+                kellyPnlUsdc = kellySharesHeld * noExitPrice - kellyVolume;
+              }
+            }
           }
 
           // 5. Update DB

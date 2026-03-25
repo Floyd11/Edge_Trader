@@ -33,8 +33,16 @@ async function checkOpenPositions(): Promise<void> {
         const tokenId = trade.market_url.split('/').at(-1) ?? trade.market_url;
         const currentPrice = await getCurrentMidPrice(tokenId);
 
-        if (trade.target_price !== null && currentPrice >= trade.target_price) {
-          // Target reached — close with PnL
+        const now = new Date();
+        const entryTime = trade.entry_time ?? now;
+        const hoursOpen = (now.getTime() - entryTime.getTime()) / (1000 * 60 * 60);
+
+        const inProfit = trade.entry_price !== null && currentPrice > trade.entry_price;
+        const targetReached = trade.target_price !== null && currentPrice >= trade.target_price;
+        const timeLimitReachedInProfit = hoursOpen >= 72 && inProfit;
+
+        if (targetReached || timeLimitReachedInProfit) {
+          // Target reached or 72h time limit in profit — close with PnL
           const pnl =
             trade.entry_volume_usdc !== null
               ? (currentPrice - (trade.entry_price ?? 0)) /
@@ -52,8 +60,9 @@ async function checkOpenPositions(): Promise<void> {
 
           if (updateResult.rows[0]) {
             await reportTrade(updateResult.rows[0]);
+            const reasonLog = targetReached ? 'Target Reached' : '72h Limit in Profit';
             console.log(
-              `[TradingCycle] CLOSED_EDGE — task_id: ${trade.task_id} | exit: ${currentPrice} | PnL: ${pnl.toFixed(2)} USDC`,
+              `[TradingCycle] CLOSED_EDGE (${reasonLog}) — task_id: ${trade.task_id} | exit: ${currentPrice} | PnL: ${pnl.toFixed(2)} USDC`,
             );
           }
         }

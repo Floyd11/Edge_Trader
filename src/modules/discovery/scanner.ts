@@ -36,16 +36,17 @@ interface AnalyzeBotResponse {
  * Parses a price or size from either an array format like `["0.5", "100"]` 
  * (Binance style) or standard object format `{ price: "0.5", size: "100" }` (Polymarket CLOB style).
  */
-function parseLevel(level: any): { price: number; size: number } {
+function parseLevel(level: [string, string] | { price: string; size: string } | unknown): { price: number; size: number } {
   if (Array.isArray(level)) {
     return {
-      price: parseFloat(level[0]),
-      size: parseFloat(level[1]),
+      price: parseFloat(String(level[0])),
+      size: parseFloat(String(level[1])),
     };
   }
+  const l = level as { price: string; size: string };
   return {
-    price: parseFloat(level.price),
-    size: parseFloat(level.size),
+    price: parseFloat(String(l.price)),
+    size: parseFloat(String(l.size)),
   };
 }
 

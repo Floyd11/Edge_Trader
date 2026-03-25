@@ -108,21 +108,29 @@ export async function appendTradeToSheet(trade: VirtualTrade): Promise<void> {
     ];
 
     const sheetName = env.GOOGLE_SHEET_NAME || 'Sheet1';
-
-    await withRetry(async () => {
-      await sheets.spreadsheets.values.append({
-        spreadsheetId: env.GOOGLE_SHEET_ID,
-        range: `${sheetName}!A:L`, // Append using dynamic sheet name
-        valueInputOption: 'USER_ENTERED',
-        requestBody: {
-          values: [rowData],
-        },
-      });
-    });
-
+    await appendValues(`${sheetName}!A:L`, [rowData]);
     console.log(`[GoogleSheets] Trade ${trade.task_id.split('-')[0]} successfully appended to sheet "${sheetName}".`);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     console.error(`[GoogleSheets] Failed to append trade to sheet:`, reason);
   }
+}
+
+/**
+ * Generic function to append rows to a specified range in the Google Sheet.
+ */
+export async function appendValues(range: string, values: (string | number | boolean | null)[][]): Promise<void> {
+  const sheets = await getSheetsClient();
+  if (!sheets || !env.GOOGLE_SHEET_ID) return;
+
+  await withRetry(async () => {
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: env.GOOGLE_SHEET_ID,
+      range,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: {
+        values,
+      },
+    });
+  });
 }

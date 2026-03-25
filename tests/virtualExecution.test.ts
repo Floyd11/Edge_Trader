@@ -47,10 +47,11 @@ describe('VirtualExecution - handleBetSignal', () => {
         'YES',
         0.65,
         100,
-        0.65 * 1.05, // assuming default TARGET_PROFIT_MULT=1.05
-        0.75,
-        0.1,
-        0.05,
+        0.70, // targetPrice = 0.75 (AI prob) - 0.05
+        0.50, // stopLoss = 0.65 (entry) - 0.15
+        0.75, // AI prob yes
+        0.1,  // edge
+        0.05, // kelly
         'normal',
         10,
         1.0,

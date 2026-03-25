@@ -27,8 +27,20 @@ export async function handleBetSignal(signal: TradeSignal): Promise<void> {
       signal.kelly_fraction,
     );
 
-    const targetMult = env.TARGET_PROFIT_MULT;
-    const targetPrice = entryPrice * targetMult;
+    const targetSlippage = env.PROFIT_SLIPPAGE;
+    const slSlippage = env.STOP_LOSS_SLIPPAGE;
+
+    let targetPrice: number;
+    let stopLossPrice: number;
+
+    if (signal.trade_direction === 'YES') {
+      targetPrice = signal.ai_prob_yes - targetSlippage;
+      stopLossPrice = entryPrice - slSlippage;
+    } else {
+      // If we bet NO, our target is (AI YES Probability) + Slippage
+      targetPrice = signal.ai_prob_yes + targetSlippage;
+      stopLossPrice = entryPrice + slSlippage;
+    }
 
     await pool.query(
       `UPDATE virtual_trades
@@ -37,19 +49,21 @@ export async function handleBetSignal(signal: TradeSignal): Promise<void> {
            entry_price       = $2,
            entry_volume_usdc = $3,
            target_price      = $4,
+           stop_loss_price   = $5,
            entry_time        = NOW(),
-           debunk_verdict    = $5,
-           edge              = $6,
-           kelly_fraction    = $7,
-           confidence        = $8,
-           prior_n           = $9,
-           confidence_mult   = $10
-       WHERE task_id = $11`,
+           debunk_verdict    = $6,
+           edge              = $7,
+           kelly_fraction    = $8,
+           confidence        = $9,
+           prior_n           = $10,
+           confidence_mult   = $11
+       WHERE task_id = $12`,
       [
         signal.trade_direction,
         entryPrice,
         volume,
         targetPrice,
+        stopLossPrice,
         signal.ai_prob_yes,
         signal.edge,
         signal.kelly_fraction,
@@ -61,8 +75,8 @@ export async function handleBetSignal(signal: TradeSignal): Promise<void> {
     );
 
     console.log(
-      `[Execution] Trade OPEN — task_id: ${signal.task_id} | ` +
-      `entry: ${entryPrice.toFixed(4)} | target: ${targetPrice.toFixed(4)} | volume: ${volume.toFixed(2)} USDC`,
+      `[Execution] Trade OPEN — task_id: ${signal.task_id} | side: ${signal.trade_direction} | ` +
+      `entry: ${entryPrice.toFixed(4)} | TP: ${targetPrice.toFixed(4)} | SL: ${stopLossPrice.toFixed(4)} | volume: ${volume.toFixed(2)} USDC`,
     );
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
