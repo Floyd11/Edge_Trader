@@ -16,16 +16,17 @@ const MAX_SPREAD = 0.05;
 const MIN_SIZE_SHARES = 50;
 
 // Internal type for Gamma Market response (simplified)
+// Note: Gamma API uses camelCase field names
 interface GammaMarket {
   id: string;
-  condition_id: string;
+  conditionId: string;    // camelCase — API changed from condition_id
+  slug: string;
   question: string;
-  url: string;
-  category: string;
+  url?: string;           // may be absent; we build URL from slug
+  category?: string;
   active: boolean;
   closed: boolean;
-  // Some endpoints return 'yes' / 'no' answers, or standard binary flags.
-  // We assume binary markets for the scope of this bot.
+  clobTokenIds?: string;  // JSON string array of token IDs
 }
 
 interface AnalyzeBotResponse {
@@ -52,11 +53,13 @@ function parseLevel(level: [string, string] | { price: string; size: string } | 
 
 /**
  * 2. Pre-check function: isMarketLiquid
- * Fetches order book from CLOB and ensures spread and liquidity are healthy.
+ * Fetches order book from CLOB by token_id and ensures spread and liquidity are healthy.
+ * NOTE: CLOB API accepts token_id (numeric string), NOT condition_id (0x-prefixed hash).
  */
-export async function isMarketLiquid(conditionId: string): Promise<boolean> {
+export async function isMarketLiquid(tokenId: string): Promise<boolean> {
   try {
-    const response = await axios.get(`https://clob.polymarket.com/book?condition_id=${conditionId}`, {
+    const response = await axios.get(`https://clob.polymarket.com/book`, {
+      params: { token_id: tokenId },
       timeout: 5000,
     });
     
@@ -74,24 +77,26 @@ export async function isMarketLiquid(conditionId: string): Promise<boolean> {
     const bestBidSize = bestBidData.size;
     const bestAskSize = bestAskData.size;
 
-    const spread = bestAsk - bestBid;
+    // For YES bids: bids are sorted descending (highest first)
+    // For YES asks: sorted ascending (lowest first). Spread = lowest ask - highest bid.
+    const spread = Math.abs(bestAsk - bestBid);
 
     // Spread limit check
     if (spread > MAX_SPREAD) {
-      console.log(`[Scout] condition_id ${conditionId}: Spread too wide (${spread.toFixed(3)})`);
+      console.log(`[Scout] token_id ${tokenId.slice(0, 12)}…: Spread too wide (${spread.toFixed(3)})`);
       return false;
     }
 
     // Minimum size check (needs >= MIN_SIZE_SHARES on at least ONE side of the spread)
     if (bestBidSize < MIN_SIZE_SHARES && bestAskSize < MIN_SIZE_SHARES) {
-      console.log(`[Scout] condition_id ${conditionId}: Low liquidity (Bid: ${bestBidSize}, Ask: ${bestAskSize})`);
+      console.log(`[Scout] token_id ${tokenId.slice(0, 12)}…: Low liquidity (Bid: ${bestBidSize}, Ask: ${bestAskSize})`);
       return false;
     }
 
     return true; // Healthy
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
-    console.error(`[Scout] Error checking liquidity for condition_id ${conditionId}:`, reason);
+    console.error(`[Scout] Error checking liquidity for token_id ${tokenId.slice(0, 12)}…:`, reason);
     return false;
   }
 }
@@ -105,12 +110,12 @@ export async function scanNewMarkets() {
   try {
     // Phase 1: Fetch
     const response = await axios.get<GammaMarket[]>(
-      'https://gamma-api.polymarket.com/markets', // Or /events depending on exact Gamma schema, /markets is universally flat
+      'https://gamma-api.polymarket.com/markets',
       {
         params: {
           active: true,
           closed: false,
-          order: 'newest',
+          // NOTE: 'order=newest' was removed — Gamma API no longer supports this param (returns 422)
           limit: 50,
         },
         timeout: 10_000,
@@ -121,46 +126,93 @@ export async function scanNewMarkets() {
 
     // Phase 2 & 3: Filter & Check
     for (const market of markets) {
+      // Skip if no conditionId (malformed entry)
+      if (!market.conditionId) continue;
+
       // Check category
       if (market.category && EXCLUDED_CATEGORIES.has(market.category)) {
         continue;
       }
 
-      // Check liquidity
-      const isLiquid = await isMarketLiquid(market.condition_id);
-      if (!isLiquid) {
-        // Logging was already done inside isMarketLiquid or skipped intentionally
+      // Extract the first CLOB token ID (clobTokenIds is a JSON string like '["123...", "456..."]')
+      // CLOB API requires token_id, not condition_id
+      let firstTokenId: string | undefined;
+      try {
+        if (market.clobTokenIds) {
+          const tokens: string[] = JSON.parse(market.clobTokenIds);
+          firstTokenId = tokens[0];
+        }
+      } catch {
+        // Malformed clobTokenIds — skip this market
+      }
+
+      if (!firstTokenId) {
+        // No token available for CLOB check, skip
         continue;
       }
 
-      console.log(`[Scout] Market ${market.condition_id} passed liquidity checks. Dispatching to D&B...`);
+      // Check liquidity via the YES token
+      const isLiquid = await isMarketLiquid(firstTokenId);
+      if (!isLiquid) {
+        // Logging was already done inside isMarketLiquid
+        continue;
+      }
 
-      // 4. Send to D&B API and DB
+      // Build market URL — use API-provided url or fall back to slug
+      const marketUrl = market.url || `https://polymarket.com/event/${market.slug}`;
+
+      // 4. Deduplication: skip markets already tracked in a non-terminal state.
+      //    We only re-dispatch if the previous attempt fully ERRORed (D&B timeout etc.).
+      //    PENDING = waiting for D&B callback, OPEN = trade active → both must be skipped.
+      //    CLOSED_EDGE / CLOSED_TIMEOUT / ERROR = terminal → allowed to re-analyse.
+      try {
+        const existing = await pool.query<{ status: string }>(
+          `SELECT status FROM virtual_trades
+           WHERE market_url = $1
+             AND status IN ('PENDING', 'OPEN')
+           LIMIT 1`,
+          [marketUrl],
+        );
+
+        if ((existing.rowCount ?? 0) > 0) {
+          // Already being processed — nothing to do
+          console.log(`[Scout] Market ${market.conditionId} already PENDING/OPEN, skipping.`);
+          continue;
+        }
+      } catch (dbErr) {
+        // If DB check fails, skip this market to be safe
+        console.error(`[Scout] DB dedup check failed for ${market.conditionId}:`, dbErr instanceof Error ? dbErr.message : String(dbErr));
+        continue;
+      }
+
+      console.log(`[Scout] Market ${market.conditionId} passed all checks. Dispatching to D&B...`);
+
+      // 5. Send to D&B API and record in DB
       try {
         const analyzeRes = await axios.post<AnalyzeBotResponse>(
           `${env.DEBUNK_API_URL}/api/v1/analyze-bot`,
           {
-            url: market.url,
+            url: marketUrl,
             webhook_url: env.BOT_WEBHOOK_URL,
           },
           {
             headers: { 'X-API-Key': env.DEBUNK_API_KEY },
             timeout: 15_000,
-          }
+          },
         );
 
         const taskId = analyzeRes.data.task_id;
 
         await pool.query(
-          `INSERT INTO virtual_trades (task_id, market_url, category, status) 
-           VALUES ($1, $2, $3, 'PENDING') 
+          `INSERT INTO virtual_trades (task_id, market_url, category, status)
+           VALUES ($1, $2, $3, 'PENDING')
            ON CONFLICT (task_id) DO NOTHING`,
-          [taskId, market.url, market.category || null]
+          [taskId, marketUrl, market.category || null],
         );
 
-        console.log(`[Scout] Successfully dispatched market. task_id: ${taskId}`);
+        console.log(`[Scout] Dispatched → task_id: ${taskId}`);
       } catch (postError) {
-        console.error(`[Scout] Failed to dispatch market ${market.condition_id} to D&B API:`, postError instanceof Error ? postError.message : String(postError));
+        console.error(`[Scout] Failed to dispatch market ${market.conditionId} to D&B API:`, postError instanceof Error ? postError.message : String(postError));
       }
     }
   } catch (err) {

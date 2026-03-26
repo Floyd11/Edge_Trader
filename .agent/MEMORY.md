@@ -53,6 +53,20 @@ edge_trader/
 - `TARGET_PROFIT_MULT` read from env (not hardcoded)
 
 ## Next Steps
-1. Deploy with PM2: `npm run build && pm2 start ecosystem.config.js`
-2. Monitor logs: `pm2 logs edge-trader`
+1. ✅ PM2 deployed: `pm2 status edge-trader` → **online**
+2. Monitor scanner results: `pm2 logs edge-trader --lines 50`
 3. Verify Google Sheets "DailyStats" automated reporting at 00:00 UTC.
+
+## Bugfixes Applied (2026-03-26)
+- **Gamma API 422**: Removed deprecated `order=newest` param
+- **Gamma API field rename**: `condition_id` → `conditionId` (camelCase)
+- **CLOB API 400**: CLOB `/book` now requires `token_id` (numeric), NOT `condition_id`. 
+  Scanner extracts first token from `clobTokenIds` JSON array.
+- **Stop-loss underflow**: `stopLossPrice` clamped to `[0.01, 0.99]` range.
+
+## PM2 Info
+- Process: `edge-trader` (id: 0), cluster mode, autorestart ON
+- Webhook: `http://localhost:3001/webhook/signal`
+- Health: `http://localhost:3001/health`
+- Logs: `pm2 logs edge-trader`
+- Config saved: `/root/.pm2/dump.pm2`

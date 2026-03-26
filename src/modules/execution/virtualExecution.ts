@@ -35,11 +35,13 @@ export async function handleBetSignal(signal: TradeSignal): Promise<void> {
 
     if (signal.trade_direction === 'YES') {
       targetPrice = signal.ai_prob_yes - targetSlippage;
-      stopLossPrice = entryPrice - slSlippage;
+      // Clamp SL to minimum 0.01 — price cannot go below 0 on Polymarket
+      stopLossPrice = Math.max(0.01, entryPrice - slSlippage);
     } else {
       // If we bet NO, our target is (AI YES Probability) + Slippage
       targetPrice = signal.ai_prob_yes + targetSlippage;
-      stopLossPrice = entryPrice + slSlippage;
+      // Clamp SL to maximum 0.99 — YES price cannot exceed 1
+      stopLossPrice = Math.min(0.99, entryPrice + slSlippage);
     }
 
     await pool.query(
