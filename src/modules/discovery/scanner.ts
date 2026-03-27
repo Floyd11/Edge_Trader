@@ -14,9 +14,9 @@ const EXCLUDED_CATEGORIES = new Set([
 ]);
 const MAX_SPREAD = 0.10;
 const MIN_SIZE_SHARES = 50;
-// How far back (in minutes) to look for newly created markets.
-// Should be slightly larger than DISCOVERY_INTERVAL_MINUTES to ensure no gaps.
-const SCAN_WINDOW_MINUTES = 6;
+const SCAN_WINDOW_MIN_MINUTES = 10;
+const SCAN_WINDOW_MAX_MINUTES = 40;
+const MIN_TOTAL_VOLUME_USDC = 500;
 
 // Internal type for Gamma Market response (simplified)
 // Note: Gamma API uses camelCase field names
@@ -31,6 +31,7 @@ interface GammaMarket {
   active: boolean;
   closed: boolean;
   clobTokenIds?: string;  // JSON string array of token IDs
+  volumeNum?: number;     // Total volume in USDC
 }
 
 interface AnalyzeBotResponse {
@@ -128,15 +129,18 @@ export async function scanNewMarkets() {
       }
     );
 
-    const cutoffTime = new Date(Date.now() - SCAN_WINDOW_MINUTES * 60 * 1000);
-    // Client-side filter: only process markets created within the scan window.
-    // This is the primary guard that ensures we act only on genuinely new markets.
+    const now = Date.now();
+    const minCutoff = new Date(now - SCAN_WINDOW_MIN_MINUTES * 60 * 1000);
+    const maxCutoff = new Date(now - SCAN_WINDOW_MAX_MINUTES * 60 * 1000);
+
+    // Client-side filter: only process markets created between 10 and 40 minutes ago.
     const markets = response.data.filter((m) => {
       if (!m.createdAt) return false;
-      return new Date(m.createdAt) >= cutoffTime;
+      const created = new Date(m.createdAt);
+      return created <= minCutoff && created >= maxCutoff;
     });
 
-    console.log(`[Scout] Fetched up to 50 newest markets. ${markets.length} created in the last ${SCAN_WINDOW_MINUTES} minutes.`);
+    console.log(`[Scout] Fetched up to 50 newest markets. ${markets.length} passed the ${SCAN_WINDOW_MIN_MINUTES}-${SCAN_WINDOW_MAX_MINUTES}m age window.`);
 
     // Phase 2 & 3: Filter & Check
     for (const market of markets) {
@@ -145,6 +149,13 @@ export async function scanNewMarkets() {
 
       // Check category
       if (market.category && EXCLUDED_CATEGORIES.has(market.category)) {
+        continue;
+      }
+
+      // Check total volume (total_volume > $500)
+      const volume = market.volumeNum || 0;
+      if (volume < MIN_TOTAL_VOLUME_USDC) {
+        console.log(`[Scout] token_id ${market.conditionId.slice(0, 12)}…: Low total volume ($${volume.toFixed(0)})`);
         continue;
       }
 

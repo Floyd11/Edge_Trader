@@ -66,6 +66,11 @@ edge_trader/
 - **Spread vs Slippage Logic (v2.2)**: Corrected terminological error. 
   `MAX_SPREAD` increased to 0.10 (guard only for extreme gaps). 
   `SLIPPAGE_LIMIT` set to 0.05 (allowing "order book walk" to 5 cents depth from Best Ask).
+- **Scanner Optimization (v2.3)**:
+  - Discovery window adjusted to **10–40 minutes** to allow for liquidity build-up.
+  - Minimal total volume filter added: **$500 USDC**.
+  - Scan interval increased to **10 minutes**.
+- **Reporting Update**: Daily digest now runs twice (00:00 & 12:00 UTC) and uses `GOOGLE_SHEET_NAME` env.
 
 ## PM2 Info
 - Process: `edge-trader` (id: 0), cluster mode, autorestart ON
