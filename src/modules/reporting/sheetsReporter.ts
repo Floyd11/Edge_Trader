@@ -1,6 +1,7 @@
 import { VirtualTrade } from '../../types';
 import { pool } from '../../db/pool';
 import { appendTradeToSheet, appendValues } from './google_sheets';
+import { env } from '../../config/env';
 
 /**
  * Appends a closed/error trade row to the configured Google Sheet.
@@ -35,10 +36,10 @@ export async function reportDailyDigest(): Promise<void> {
       Number(total || 0)
     ];
 
-    // Attempt to append to a DailyStats sheet. 
-    // If it doesn't exist, it will fail but we catch the error to prevent crash.
-    await appendValues('DailyStats!A:E', [rowData]);
-    console.log(`[Reporting] Daily digest sent: ${net_pnl} USDC profit across ${total} total events.`);
+    // Use the same sheet name as trade reporting — configured via GOOGLE_SHEET_NAME env var.
+    const sheetName = env.GOOGLE_SHEET_NAME || 'Sheet1';
+    await appendValues(`${sheetName}!A:E`, [rowData]);
+    console.log(`[Reporting] Daily digest sent to "${sheetName}": ${net_pnl} USDC profit across ${total} total events.`);
   } catch (error) {
     console.error('[Reporting] Failed to send daily digest:', error instanceof Error ? error.message : String(error));
   }
