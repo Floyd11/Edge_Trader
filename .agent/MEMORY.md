@@ -63,6 +63,9 @@ edge_trader/
 - **CLOB API 400**: CLOB `/book` now requires `token_id` (numeric), NOT `condition_id`. 
   Scanner extracts first token from `clobTokenIds` JSON array.
 - **Stop-loss underflow**: `stopLossPrice` clamped to `[0.01, 0.99]` range.
+- **Spread vs Slippage Logic (v2.2)**: Corrected terminological error. 
+  `MAX_SPREAD` increased to 0.10 (guard only for extreme gaps). 
+  `SLIPPAGE_LIMIT` set to 0.05 (allowing "order book walk" to 5 cents depth from Best Ask).
 
 ## PM2 Info
 - Process: `edge-trader` (id: 0), cluster mode, autorestart ON

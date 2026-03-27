@@ -23,8 +23,8 @@ export interface OrderBook {
 }
 
 const MAX_BANK_USDC = 5000;
-const SLIPPAGE_LIMIT = 0.03;
-const MAX_SPREAD = 0.05;
+const SLIPPAGE_LIMIT = 0.05;
+const MAX_SPREAD = 0.10;
 
 const EXCLUDED_CATEGORIES = new Set([
   'Crypto',

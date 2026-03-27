@@ -12,8 +12,11 @@ const EXCLUDED_CATEGORIES = new Set([
   'Mentions',
   'Other / General',
 ]);
-const MAX_SPREAD = 0.05;
+const MAX_SPREAD = 0.10;
 const MIN_SIZE_SHARES = 50;
+// How far back (in minutes) to look for newly created markets.
+// Should be slightly larger than DISCOVERY_INTERVAL_MINUTES to ensure no gaps.
+const SCAN_WINDOW_MINUTES = 6;
 
 // Internal type for Gamma Market response (simplified)
 // Note: Gamma API uses camelCase field names
@@ -22,6 +25,7 @@ interface GammaMarket {
   conditionId: string;    // camelCase — API changed from condition_id
   slug: string;
   question: string;
+  createdAt?: string;     // ISO 8601 timestamp — used to filter only new markets
   url?: string;           // may be absent; we build URL from slug
   category?: string;
   active: boolean;
@@ -108,21 +112,31 @@ export async function scanNewMarkets() {
   console.log('[Scout] Starting Gamma API market discovery scan...');
 
   try {
-    // Phase 1: Fetch
+    // Phase 1: Fetch — request only the newest markets, sorted by creation time descending.
+    // 'order=createdAt&ascending=false' is supported by the Gamma API (unlike deprecated 'order=newest').
     const response = await axios.get<GammaMarket[]>(
       'https://gamma-api.polymarket.com/markets',
       {
         params: {
           active: true,
           closed: false,
-          // NOTE: 'order=newest' was removed — Gamma API no longer supports this param (returns 422)
-          limit: 50,
+          order: 'createdAt',
+          ascending: false,
+          limit: 50, // 50 is more than enough to cover SCAN_WINDOW_MINUTES of new markets
         },
         timeout: 10_000,
       }
     );
 
-    const markets = response.data;
+    const cutoffTime = new Date(Date.now() - SCAN_WINDOW_MINUTES * 60 * 1000);
+    // Client-side filter: only process markets created within the scan window.
+    // This is the primary guard that ensures we act only on genuinely new markets.
+    const markets = response.data.filter((m) => {
+      if (!m.createdAt) return false;
+      return new Date(m.createdAt) >= cutoffTime;
+    });
+
+    console.log(`[Scout] Fetched up to 50 newest markets. ${markets.length} created in the last ${SCAN_WINDOW_MINUTES} minutes.`);
 
     // Phase 2 & 3: Filter & Check
     for (const market of markets) {
@@ -226,6 +240,8 @@ export async function scanNewMarkets() {
  */
 export function startScanner() {
   const interval = env.DISCOVERY_INTERVAL_MINUTES || 5;
+  // Run once on startup
+  scanNewMarkets();
   cron.schedule(`*/${interval} * * * *`, () => {
     scanNewMarkets();
   });
