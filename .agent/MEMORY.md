@@ -68,7 +68,7 @@ edge_trader/
   `SLIPPAGE_LIMIT` set to 0.05 (allowing "order book walk" to 5 cents depth from Best Ask).
 - **Scanner Optimization (v2.3)**:
   - Discovery window adjusted to **10–40 minutes** to allow for liquidity build-up.
-  - Minimal total volume filter added: **$500 USDC**.
+  - Minimal total volume filter added: **$200 USDC**.
   - Scan interval increased to **10 minutes**.
 - **Reporting Update**: Daily digest now runs twice (00:00 & 12:00 UTC) and uses `GOOGLE_SHEET_NAME` env.
 

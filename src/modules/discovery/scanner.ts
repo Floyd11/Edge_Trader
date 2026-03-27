@@ -16,7 +16,7 @@ const MAX_SPREAD = 0.10;
 const MIN_SIZE_SHARES = 50;
 const SCAN_WINDOW_MIN_MINUTES = 10;
 const SCAN_WINDOW_MAX_MINUTES = 40;
-const MIN_TOTAL_VOLUME_USDC = 500;
+const MIN_TOTAL_VOLUME_USDC = 200;
 
 // Internal type for Gamma Market response (simplified)
 // Note: Gamma API uses camelCase field names
@@ -152,7 +152,7 @@ export async function scanNewMarkets() {
         continue;
       }
 
-      // Check total volume (total_volume > $500)
+      // Check total volume (total_volume > $200)
       const volume = market.volumeNum || 0;
       if (volume < MIN_TOTAL_VOLUME_USDC) {
         console.log(`[Scout] token_id ${market.conditionId.slice(0, 12)}…: Low total volume ($${volume.toFixed(0)})`);
