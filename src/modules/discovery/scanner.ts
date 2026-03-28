@@ -15,8 +15,8 @@ const EXCLUDED_CATEGORIES = new Set([
 const MAX_SPREAD = 0.10;
 const MIN_SIZE_SHARES = 50;
 const SCAN_WINDOW_MIN_MINUTES = 10;
-const SCAN_WINDOW_MAX_MINUTES = 40;
-const MIN_TOTAL_VOLUME_USDC = 200;
+const SCAN_WINDOW_MAX_MINUTES = 60;
+const MIN_TOTAL_VOLUME_USDC = 50;
 
 // Internal type for Gamma Market response (simplified)
 // Note: Gamma API uses camelCase field names
